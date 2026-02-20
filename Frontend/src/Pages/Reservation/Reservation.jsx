@@ -20,7 +20,7 @@ const Reservation = () => {
     e.preventDefault();
     try {
       const { data } = await axios.post(
-        "http://localhost:4000/api/v1/reservation/send",
+        `${import.meta.env.VITE_API_URL}/api/v1/reservation/send`,
         { firstName, lastName, email, phone, date, time, branch },
         {
           headers: {

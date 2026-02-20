@@ -12,7 +12,7 @@ const ManagerDashboard = () => {
     useEffect(() => {
         const fetchReservations = async () => {
             try {
-                const response = await fetch('http://localhost:4000/api/reservations');
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/reservations`);
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
@@ -42,7 +42,7 @@ const ManagerDashboard = () => {
     // Function to handle reservation deletion
     const deleteReservation = async (id, branch) => {
         try {
-            const response = await axios.delete(`http://localhost:4000/api/reservations/delete/${id}`);
+            const response = await axios.delete(`${import.meta.env.VITE_API_URL}/api/reservations/delete/${id}`);
             if (response.status === 200) {
                 toast.success("Reservation is deleted successfully");
                 setReservationsByBranch((prevData) => {
