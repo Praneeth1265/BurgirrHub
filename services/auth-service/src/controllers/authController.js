@@ -5,10 +5,15 @@ import { ErrorHandler } from "../error/error.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// In production the frontend (Vercel) and this service (EC2) are on
+// different sites, so the refresh cookie needs SameSite=None to be sent
+// on cross-site fetch/XHR calls -- which browsers only honor when the
+// cookie is also Secure (HTTPS-only). Local dev stays "lax" since
+// localhost:5173 -> localhost:8080 is same-site over plain HTTP.
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 

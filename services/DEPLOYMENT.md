@@ -52,19 +52,45 @@ curl http://localhost/   # should reach the gateway through Nginx
 
 From outside: `http://<EC2_PUBLIC_IP>/health` should hit the gateway.
 
-### 4. (Optional) HTTPS with a real domain
+### 4. HTTPS with sslip.io (required for Google Sign-In)
 
-Point your domain's A record at the EC2 instance's public IP, then:
+Google's OAuth policy requires `https://` for any non-localhost Authorized
+JavaScript origin, and browsers block a HTTPS frontend (Vercel) from
+calling a plain `http://` API (mixed content) — so this step isn't
+optional once the frontend is deployed. `sslip.io` gives a real hostname
+that resolves straight to your IP with **no signup**: replacing the dots
+in your Elastic IP with the same digits gives you a working domain, e.g.
+`203.0.113.45` → `203-0-113-45.sslip.io`.
 
 ```bash
-sudo apt-get install -y certbot python3-certbot-nginx
-# Nginx here is containerized, so install certbot on the HOST and either:
-#  (a) run a temporary host-level Nginx just for the cert issuance, or
-#  (b) use the standalone/webroot certbot plugin against the containerized Nginx,
-#      mounting the challenge directory as a volume.
-# This is the one step genuinely easier outside Docker; see certbot docs for
-# the "webroot" plugin pattern if you want to keep everything containerized.
+sudo apt-get install -y certbot
+
+cd ~/BurgirrHub/services
+docker compose stop nginx        # frees port 80 for the standalone challenge
+
+sudo certbot certonly --standalone -d YOUR_DOMAIN   # e.g. 203-0-113-45.sslip.io
+# Certs land in /etc/letsencrypt/live/YOUR_DOMAIN/ on the host.
+
+nano nginx/nginx.conf             # replace both YOUR_DOMAIN placeholders with your real one
+
+docker compose up -d nginx        # restart with the cert mounted + HTTPS config
+curl https://YOUR_DOMAIN/health   # confirm from the server
 ```
+
+Then, from your own machine, `curl https://YOUR_DOMAIN/health` should also
+work — and that's the URL to use for `VITE_GATEWAY_URL` in Vercel.
+
+Also set `NODE_ENV=production` in `services/.env` before this point (or
+now, followed by `docker compose up -d`) — the refresh-token cookie only
+gets the `Secure; SameSite=None` attributes required for a cross-site
+Vercel↔EC2 setup when `NODE_ENV=production` (see
+`auth-service/src/controllers/authController.js`).
+
+**Renewal**: Let's Encrypt certs expire after 90 days. Since this uses the
+standalone plugin, renewing needs the same brief `docker compose stop
+nginx && sudo certbot renew && docker compose up -d nginx` dance — there's
+no cron auto-renewal wired up here. Fine for a portfolio deployment; put a
+calendar reminder for ~80 days out.
 
 ### 5. Updating a deployment
 
