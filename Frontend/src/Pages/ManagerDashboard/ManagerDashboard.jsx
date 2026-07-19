@@ -1,120 +1,187 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import React, { useEffect, useState, useCallback } from "react";
+import toast from "react-hot-toast";
+import { gatewayClient } from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 
+// Valid next steps per current order status -- mirrors the Order
+// Service's own state machine (orderTransitions.js). Kept in sync
+// manually since this is just a UI hint; the server is the real
+// authority and will reject anything invalid regardless.
+const NEXT_STATUSES = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["ready"],
+  ready: ["completed"],
+  completed: [],
+  cancelled: [],
+};
 
 const ManagerDashboard = () => {
-    const [reservationsByBranch, setReservationsByBranch] = useState({});
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [selectedBranch, setSelectedBranch] = useState(null); // Track selected branch visibility
+  const { user, logout } = useAuth();
+  const [tab, setTab] = useState("reservations");
 
-    useEffect(() => {
-        const fetchReservations = async () => {
-            try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/reservations`);
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                const data = await response.json();
-                console.log("Fetched Reservations:", data);
+  const [reservationsByBranch, setReservationsByBranch] = useState({});
+  const [selectedBranch, setSelectedBranch] = useState(null);
+  const [loadingReservations, setLoadingReservations] = useState(true);
 
-                // Group reservations by branch
-                const groupedData = data.reduce((acc, reservation) => {
-                    const branch = reservation.branch;
-                    if (!acc[branch]) {
-                        acc[branch] = [];
-                    }
-                    acc[branch].push(reservation);
-                    return acc;
-                }, {});
-                setReservationsByBranch(groupedData);
-            } catch (error) {
-                setError('Error fetching reservations: ' + error.message);
-            } finally {
-                setLoading(false);
-            }
-        };
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
-        fetchReservations();
-    }, []);
+  const fetchReservations = useCallback(async () => {
+    setLoadingReservations(true);
+    try {
+      const { data } = await gatewayClient.get("/reservations");
+      // reservation.branch is a populated { _id, name, address } document
+      // now, not a plain string -- see Reservation Service's listReservations.
+      const grouped = data.reservations.reduce((acc, reservation) => {
+        const branchName = reservation.branch?.name || "Unknown";
+        if (!acc[branchName]) acc[branchName] = [];
+        acc[branchName].push(reservation);
+        return acc;
+      }, {});
+      setReservationsByBranch(grouped);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load reservations");
+    } finally {
+      setLoadingReservations(false);
+    }
+  }, []);
 
-    // Function to handle reservation deletion
-    const deleteReservation = async (id, branch) => {
-        try {
-            const response = await axios.delete(`${import.meta.env.VITE_API_URL}/api/reservations/delete/${id}`);
-            if (response.status === 200) {
-                toast.success("Reservation is deleted successfully");
-                setReservationsByBranch((prevData) => {
-                    const updatedData = { ...prevData };
-                    // Remove the deleted reservation from the branch
-                    updatedData[branch] = updatedData[branch].filter((reservation) => reservation._id !== id);
+  const fetchOrders = useCallback(async () => {
+    setLoadingOrders(true);
+    try {
+      const { data } = await gatewayClient.get("/orders");
+      setOrders(data.orders);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load orders");
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, []);
 
-                    // If the branch has no reservations left, hide it (don't delete it)
-                    if (updatedData[branch].length === 0) {
-                        updatedData[branch] = null;  // Set it to null to hide it
-                    }
+  useEffect(() => {
+    fetchReservations();
+    fetchOrders();
+  }, [fetchReservations, fetchOrders]);
 
-                    return updatedData;
-                });
-            }
-        } catch (error) {
-            toast.error("Error deleting reservation");
-        }
-    };
+  const deleteReservation = async (id, branchName) => {
+    try {
+      await gatewayClient.delete(`/reservations/${id}`);
+      toast.success("Reservation deleted");
+      setReservationsByBranch((prev) => {
+        const updated = { ...prev };
+        updated[branchName] = updated[branchName].filter((r) => r._id !== id);
+        return updated;
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Error deleting reservation");
+    }
+  };
 
-    // Toggle visibility of branch data
-    const toggleBranchVisibility = (branch) => {
-        setSelectedBranch((prevBranch) => (prevBranch === branch ? null : branch)); // Toggle visibility of branch
-    };
+  const updateOrderStatus = async (orderId, nextStatus) => {
+    try {
+      const { data } = await gatewayClient.patch(`/orders/${orderId}/status`, { status: nextStatus });
+      toast.success(`Order moved to "${nextStatus}"`);
+      setOrders((prev) => prev.map((o) => (o._id === orderId ? data.order : o)));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update order status");
+    }
+  };
 
-    return (
-        <div style={{ padding: '20px' }}>
-            <div className="manager-header">
-                <a href="/" className="back-to-home-btn">Back to Home</a>
-                <h1>Manager Dashboard</h1>
-            </div>
-            {loading && <p>Loading reservations...</p>}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            <div className='reservation-container'>
-                {Object.keys(reservationsByBranch).length > 0 ? (
-                    Object.entries(reservationsByBranch).map(([branch, reservations]) => (
-                        reservations !== null && (
-                            <div key={branch} className="branch-column">
-                                <button
-                                    onClick={() => toggleBranchVisibility(branch)}
-                                    className='btn'
-                                >
-                                    {branch} Branch
-                                </button>
-                                {selectedBranch === branch && (
-                                    <div className="reservation-items-container">
-                                        {reservations.map(reservation => (
-                                            <div className="reservation-item" key={reservation._id}>
-                                                <div>NAME: {reservation.firstName} {reservation.lastName}</div>
-                                                <div>EMAIL: {reservation.email}</div>
-                                                <div>DATE: {reservation.date}</div>
-                                                <div>TIME: {reservation.time}</div>
-                                                <div>PHONE: {reservation.phone}</div>
-                                                <div>BRANCH: {reservation.branch}</div>
-                                                <div className="delete-btn-container">
-                                                    <button onClick={() => deleteReservation(reservation._id, branch)}>
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    ))
-                ) : (
-                    <p>No reservations found.</p>
-                )}
-            </div>
+  const toggleBranchVisibility = (branchName) => {
+    setSelectedBranch((prev) => (prev === branchName ? null : branchName));
+  };
+
+  return (
+    <div style={{ padding: "20px" }}>
+      <div className="manager-header">
+        <a href="/" className="back-to-home-btn">
+          Back to Home
+        </a>
+        <h1>Manager Dashboard</h1>
+        <div className="manager-header-right">
+          <span>
+            {user?.name} ({user?.role})
+          </span>
+          <button className="btn" onClick={logout}>
+            Logout
+          </button>
         </div>
-    );
+      </div>
+
+      <div style={{ display: "flex", gap: 12, margin: "100px 0 20px" }}>
+        <button className="btn" onClick={() => setTab("reservations")} disabled={tab === "reservations"}>
+          Reservations
+        </button>
+        <button className="btn" onClick={() => setTab("orders")} disabled={tab === "orders"}>
+          Orders
+        </button>
+      </div>
+
+      {tab === "reservations" && (
+        <div className="reservation-container">
+          {loadingReservations && <p>Loading reservations...</p>}
+          {!loadingReservations && Object.keys(reservationsByBranch).length === 0 && (
+            <p>No reservations found.</p>
+          )}
+          {Object.entries(reservationsByBranch).map(([branchName, reservations]) => (
+            <div key={branchName} className="branch-column">
+              <button onClick={() => toggleBranchVisibility(branchName)} className="btn">
+                {branchName} Branch ({reservations.length})
+              </button>
+              {selectedBranch === branchName && (
+                <div className="reservation-items-container">
+                  {reservations.map((reservation) => (
+                    <div className="reservation-item" key={reservation._id}>
+                      <div>
+                        NAME: {reservation.firstName} {reservation.lastName}
+                      </div>
+                      <div>EMAIL: {reservation.email}</div>
+                      <div>DATE: {reservation.date}</div>
+                      <div>TIME: {reservation.time}</div>
+                      <div>PHONE: {reservation.phone}</div>
+                      <div className="delete-btn-container">
+                        <button onClick={() => deleteReservation(reservation._id, branchName)}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "orders" && (
+        <div className="reservation-container">
+          {loadingOrders && <p>Loading orders...</p>}
+          {!loadingOrders && orders.length === 0 && <p>No orders found.</p>}
+          {orders.map((order) => (
+            <div className="reservation-item" key={order._id} style={{ marginBottom: 12 }}>
+              <div>ORDER ID: {order._id}</div>
+              <div>BRANCH: {order.branch}</div>
+              <div>CUSTOMER: {order.customerEmail}</div>
+              <div>
+                ITEMS:{" "}
+                {order.items.map((i) => `${i.name} x${i.quantity}`).join(", ")}
+              </div>
+              <div>TOTAL: &#8377;{order.totalAmount}</div>
+              <div>STATUS: {order.status}</div>
+              {NEXT_STATUSES[order.status]?.length > 0 && (
+                <div className="delete-btn-container" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {NEXT_STATUSES[order.status].map((nextStatus) => (
+                    <button key={nextStatus} onClick={() => updateOrderStatus(order._id, nextStatus)}>
+                      Mark {nextStatus}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default ManagerDashboard;

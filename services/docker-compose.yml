@@ -1,0 +1,171 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: burgirrhub-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - burgirrhub
+
+  redis:
+    image: redis:7-alpine
+    container_name: burgirrhub-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - burgirrhub
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: burgirrhub-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - burgirrhub
+
+  auth-service:
+    build: ./auth-service
+    container_name: burgirrhub-auth-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${AUTH_SERVICE_PORT:-4001}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - DB_NAME=${AUTH_DB_NAME:-auth_db}
+    depends_on:
+      - mongo
+    ports:
+      - "4001:4001"
+    networks:
+      - burgirrhub
+
+  reservation-service:
+    build: ./reservation-service
+    container_name: burgirrhub-reservation-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${RESERVATION_SERVICE_PORT:-4002}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - DB_NAME=${RESERVATION_DB_NAME:-reservation_db}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+    depends_on:
+      - mongo
+      - rabbitmq
+    ports:
+      - "4002:4002"
+    networks:
+      - burgirrhub
+
+  order-service:
+    build: ./order-service
+    container_name: burgirrhub-order-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${ORDER_SERVICE_PORT:-4003}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - DB_NAME=${ORDER_DB_NAME:-order_db}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+    depends_on:
+      - mongo
+      - rabbitmq
+    ports:
+      - "4003:4003"
+    networks:
+      - burgirrhub
+
+  payment-service:
+    build: ./payment-service
+    container_name: burgirrhub-payment-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${PAYMENT_SERVICE_PORT:-4004}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - DB_NAME=${PAYMENT_DB_NAME:-payment_db}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+      - ORDER_SERVICE_URL=http://order-service:4003
+    depends_on:
+      - mongo
+      - rabbitmq
+      - order-service
+    ports:
+      - "4004:4004"
+    networks:
+      - burgirrhub
+
+  notification-service:
+    build: ./notification-service
+    container_name: burgirrhub-notification-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${NOTIFICATION_SERVICE_PORT:-4005}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - DB_NAME=${NOTIFICATION_DB_NAME:-notification_db}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
+    depends_on:
+      - mongo
+      - rabbitmq
+    ports:
+      - "4005:4005"
+    networks:
+      - burgirrhub
+
+  gateway:
+    build: ./gateway
+    container_name: burgirrhub-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=${GATEWAY_PORT:-8080}
+      - AUTH_SERVICE_URL=http://auth-service:4001
+      - RESERVATION_SERVICE_URL=http://reservation-service:4002
+      - ORDER_SERVICE_URL=http://order-service:4003
+      - PAYMENT_SERVICE_URL=http://payment-service:4004
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4005
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - auth-service
+      - reservation-service
+      - order-service
+      - payment-service
+      - notification-service
+      - redis
+    ports:
+      - "8080:8080"
+    networks:
+      - burgirrhub
+
+  nginx:
+    image: nginx:alpine
+    container_name: burgirrhub-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gateway
+    ports:
+      - "80:80"
+    networks:
+      - burgirrhub
+
+networks:
+  burgirrhub:
+    driver: bridge
+
+volumes:
+  mongo_data:

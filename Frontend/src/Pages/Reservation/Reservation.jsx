@@ -1,10 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { HiOutlineArrowNarrowRight } from "react-icons/hi";
-import axios from "axios";
-import { useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
+import { gatewayClient } from "../../api/client";
 
 const Reservation = () => {
   const [firstName, setFirstName] = useState("");
@@ -12,35 +11,45 @@ const Reservation = () => {
   const [email, setEmail] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [phone, setPhone] = useState(0);
-  const [branch, setBranch] = useState("");
+  const [phone, setPhone] = useState("");
+  const [branchId, setBranchId] = useState("");
+  const [branches, setBranches] = useState([]);
   const navigate = useNavigate();
+
+  // Branches are now real documents (name, address, hours) served by the
+  // Reservation Service, not a hardcoded string enum baked into this form
+  // -- see services/reservation-service/src/seed/seedBranches.js.
+  useEffect(() => {
+    gatewayClient
+      .get("/branches")
+      .then(({ data }) => setBranches(data.branches))
+      .catch(() => toast.error("Failed to load branches"));
+  }, []);
 
   const handleReservation = async (e) => {
     e.preventDefault();
     try {
-      const { data } = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/v1/reservation/send`,
-        { firstName, lastName, email, phone, date, time, branch },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          withCredentials: true,
-        }
-      );
-      toast.success(data.message);
+      const { data } = await gatewayClient.post("/reservations", {
+        firstName,
+        lastName,
+        email,
+        phone,
+        date,
+        time,
+        branchId,
+      });
+      toast.success("Reservation confirmed");
       setFirstName("");
       setLastName("");
-      setPhone(0);
+      setPhone("");
       setEmail("");
       setTime("");
       setDate("");
-      setBranch("");
+      setBranchId("");
       navigate("/success");
     } catch (error) {
       console.error(error);
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Something went wrong");
     }
   };
   return (
@@ -88,36 +97,42 @@ const Reservation = () => {
                   onChange={(e) => setEmail(e.target.value)}
                 />
                 <input
-                  type="number"
+                  type="tel"
                   placeholder="Phone"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
               <div id="res_div">
-                <select name="branch" id="branch" value={branch} onChange={(e) => setBranch(e.target.value)}>
-                  <option value="" disabled hidden>Restaurant Branch</option>
-                  <option value="HSR Layout">HSR Layout</option>
-                  <option value="Bannerghatta">Bannerghatta</option>
-                  <option value="Kormanagala">Kormanagala</option>
-                  <option value="White field">White field</option>
-                  <option value="Majestic">Majestic</option>
-                  <option value="ITPL">ITPL</option>
+                <select
+                  name="branch"
+                  id="branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                >
+                  <option value="" disabled hidden>
+                    Restaurant Branch
+                  </option>
+                  {branches.map((b) => (
+                    <option key={b._id} value={b._id}>
+                      {b.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="buttons">
-              <button type="submit" onClick={handleReservation} className="subbtn">
-                RESERVE NOW{" "}
-                <span>
-                  <HiOutlineArrowNarrowRight />
-                </span>
-              </button>
-              <Link to={"/"}>
-                Back to Home{" "}
-                <span>
-                  <HiOutlineArrowNarrowRight />
-                </span>
-              </Link>
+                <button type="submit" onClick={handleReservation} className="subbtn">
+                  RESERVE NOW{" "}
+                  <span>
+                    <HiOutlineArrowNarrowRight />
+                  </span>
+                </button>
+                <Link to={"/"}>
+                  Back to Home{" "}
+                  <span>
+                    <HiOutlineArrowNarrowRight />
+                  </span>
+                </Link>
               </div>
             </form>
             <p>For Further Questions, Please Call 9392588167</p>

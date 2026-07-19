@@ -3,8 +3,13 @@ import React from "react";
 import { data } from "../restApi.json";
 import { Link } from "react-scroll";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 
 const Navbar = () => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const { itemCount } = useCart();
+  const isStaff = user?.role === "staff" || user?.role === "admin";
 
   return (
     <>
@@ -30,12 +35,31 @@ const Navbar = () => {
             <div>
               <NavLink to="/reservations">RESERVATION</NavLink>
             </div>
-          </div>
             <div>
-                  <NavLink to="/login">
-                    <button className="manbtn">Manager Dashboard</button>
-                  </NavLink>
+              <NavLink to="/order">
+                ORDER {itemCount > 0 && `(${itemCount})`}
+              </NavLink>
             </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {isStaff && (
+              <NavLink to="/manager-dashboard">
+                <button className="manbtn">Manager Dashboard</button>
+              </NavLink>
+            )}
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/orders/history">My Orders</NavLink>
+                <button className="manbtn" onClick={logout}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <NavLink to="/login">
+                <button className="manbtn">Sign In</button>
+              </NavLink>
+            )}
+          </div>
         </div>
       </nav>
     </>
