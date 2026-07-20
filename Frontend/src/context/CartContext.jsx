@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useAuth } from "./AuthContext";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "burgirrhub_cart";
 
 export function CartProvider({ children }) {
+  // Nested inside AuthProvider (see App.jsx) specifically so this can react
+  // to sign-out -- a cart built while signed in as one person shouldn't
+  // silently hand off to whoever signs in next on the same device.
+  const { isAuthenticated } = useAuth();
+  const wasAuthenticated = useRef(isAuthenticated);
+
   const [branch, setBranch] = useState(() => localStorage.getItem(`${STORAGE_KEY}_branch`) || "");
   const [items, setItems] = useState(() => {
     try {
@@ -54,6 +61,16 @@ export function CartProvider({ children }) {
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);
+
+  // Fires only on an actual signed-in -> signed-out transition (the ref
+  // guards against clearing on first mount, when isAuthenticated starts
+  // false until the refresh-cookie check resolves).
+  useEffect(() => {
+    if (wasAuthenticated.current && !isAuthenticated) {
+      clearCart();
+    }
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated, clearCart]);
 
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
