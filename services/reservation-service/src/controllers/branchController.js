@@ -19,3 +19,22 @@ export const getBranch = async (req, res, next) => {
     next(error);
   }
 };
+
+// Admin-only (see gateway route). Lets the manager dashboard's
+// Availability tab manually reset/adjust a branch's live seat count (e.g.
+// at the start of each day) or its total capacity.
+export const updateBranch = async (req, res, next) => {
+  try {
+    const { availableSeats, capacity } = req.body;
+    const update = {};
+    if (availableSeats !== undefined) update.availableSeats = availableSeats;
+    if (capacity !== undefined) update.capacity = capacity;
+
+    const branch = await Branch.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!branch) return next(new ErrorHandler("Branch not found", 404));
+
+    res.status(200).json({ success: true, branch });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -13,6 +13,7 @@ const reservationSchema = new mongoose.Schema(
     phone: { type: String, required: true },
     date: { type: String, required: true },
     time: { type: String, required: true },
+    guests: { type: Number, required: true, min: 1 },
     // References this service's own Branch collection (both live in the
     // same reservation_db). Deliberately NOT a cross-service reference to
     // anything in the Auth Service's database -- see authenticate.js for

@@ -21,6 +21,7 @@ const createReservationSchema = z.object({
   date: z.string().min(1, "date is required"),
   time: z.string().min(1, "time is required"),
   branchId: z.string().min(1, "branchId is required"),
+  guests: z.number().int().min(1, "At least 1 guest is required").max(20, "For parties over 20, please call the branch"),
 });
 
 router.post("/", validate(createReservationSchema), createReservation);

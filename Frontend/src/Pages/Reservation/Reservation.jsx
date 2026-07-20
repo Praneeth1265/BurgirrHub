@@ -12,8 +12,10 @@ const Reservation = () => {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [phone, setPhone] = useState("");
+  const [guests, setGuests] = useState(2);
   const [branchId, setBranchId] = useState("");
   const [branches, setBranches] = useState([]);
+  const [booked, setBooked] = useState(false);
   const navigate = useNavigate();
 
   // Branches are now real documents (name, address, hours) served by the
@@ -29,29 +31,51 @@ const Reservation = () => {
   const handleReservation = async (e) => {
     e.preventDefault();
     try {
-      const { data } = await gatewayClient.post("/reservations", {
+      await gatewayClient.post("/reservations", {
         firstName,
         lastName,
         email,
         phone,
         date,
         time,
+        guests: Number(guests),
         branchId,
       });
       toast.success("Reservation confirmed");
-      setFirstName("");
-      setLastName("");
-      setPhone("");
-      setEmail("");
-      setTime("");
-      setDate("");
-      setBranchId("");
-      navigate("/success");
+      setBooked(true);
     } catch (error) {
       console.error(error);
       toast.error(error.response?.data?.message || "Something went wrong");
     }
   };
+
+  if (booked) {
+    return (
+      <section className="reservation" id="reservation">
+        <div className="container" style={{ justifyContent: "center" }}>
+          <div className="banner" style={{ flex: "1 1 500px", maxWidth: 500 }}>
+            <div className="reservation-success-box">
+              <div className="success-icon">&#10003;</div>
+              <h2>Your table is booked!</h2>
+              <p>
+                We've saved your seats. While you wait, would you like to
+                order food ahead so it's ready when you arrive?
+              </p>
+              <div className="success-actions">
+                <button className="btn" onClick={() => navigate("/order")}>
+                  Order Food Now
+                </button>
+                <button className="btn btn-outline" onClick={() => navigate("/")}>
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="reservation" id="reservation">
       <div className="container">
@@ -101,6 +125,17 @@ const Reservation = () => {
                   placeholder="Phone"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="guests-field">
+                <label htmlFor="guests">Number of Guests</label>
+                <input
+                  id="guests"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={guests}
+                  onChange={(e) => setGuests(e.target.value)}
                 />
               </div>
               <div id="res_div">

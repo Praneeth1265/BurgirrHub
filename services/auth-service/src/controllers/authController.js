@@ -5,6 +5,15 @@ import { ErrorHandler } from "../error/error.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// Comma-separated allowlist (e.g. "gpraneeth555@gmail.com") that always
+// gets the admin role, checked on every login so it self-heals even if the
+// role was ever changed manually in the DB. Demo-scale mechanism -- fine
+// for "one or two known owner accounts", not a real admin-management system.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+
 // In production the frontend (Vercel) and this service (EC2) are on
 // different sites, so the refresh cookie needs SameSite=None to be sent
 // on cross-site fetch/XHR calls -- which browsers only honor when the
@@ -37,7 +46,11 @@ export const googleLogin = async (req, res, next) => {
         googleId: payload.sub,
         email: payload.email,
         name: payload.name,
+        role: ADMIN_EMAILS.includes(payload.email.toLowerCase()) ? "admin" : "customer",
       });
+    } else if (ADMIN_EMAILS.includes(user.email.toLowerCase()) && user.role !== "admin") {
+      user.role = "admin";
+      await user.save();
     }
 
     const accessToken = signAccessToken(user);

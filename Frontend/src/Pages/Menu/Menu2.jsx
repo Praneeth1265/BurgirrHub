@@ -1,63 +1,69 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
+import { gatewayClient } from "../../api/client";
+
+const CUISINES = ["All", "American", "Italian", "Chinese"];
 
 const Menu2 = () => {
-    return (
-        <div className="menu-container">
-            <a href="/" className="back-to-home-btn">Back to Home</a>
-            <h1 className="menu-title">Menu</h1>
-            <div className="menu-items">
-                <div className="menu-item">
-                    <img src="./dinner1.jpeg" alt="Potato" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Baked Pocoloco</Link>
-                </div>  
-                <div className="menu-item">
-                    <img src="./dinner2.png" alt="Bacon Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Chengunesia</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./dinner3.png" alt="Veggie Burger" className="burger-image"/>
-                    <Link to="/reservations"className="menu-link">Chechi's Cake</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./dinner4.png" alt="Spicy Burger" className="burger-image"/>
-                    <Link to="/reservations"className="menu-link">Smoky Soup</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./dinner5.png" alt="Double Cheeseburger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Naagin Noodles</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./dinner6.png" alt="Chicken Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Mirchi Bajji</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./fish.jpg" alt="Fish Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Fried Fish</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./lunchchi.jpg" alt="Mushroom Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Mangolia Mushroom</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./dinner.jpg" alt="Mushroom Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Indian THALA</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./lunch1.png" alt="Mushroom Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Burgirr's Burger</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./sandwich.png" alt="Mushroom Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Sandwich</Link>
-                </div>
-                <div className="menu-item">
-                    <img src="./hyd_biry.jpg" alt="Mushroom Burger" className="burger-image"/>
-                    <Link to="/reservations" className="menu-link">Cheeky Chicken Biryani</Link>
-                </div>
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [cuisine, setCuisine] = useState("All");
+
+  useEffect(() => {
+    gatewayClient
+      .get("/menu")
+      .then(({ data }) => setItems(data.items))
+      .catch(() => toast.error("Failed to load menu"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = useMemo(
+    () => (cuisine === "All" ? items : items.filter((i) => i.cuisine === cuisine)),
+    [items, cuisine]
+  );
+
+  return (
+    <div className="menu-container">
+      <a href="/" className="back-to-home-btn">
+        Back to Home
+      </a>
+      <h1 className="menu-title">Our Menu</h1>
+      <p className="menu-subtitle">
+        From countryside classics to Italian and Chinese favorites &mdash; tap
+        any dish to order it.
+      </p>
+
+      <div className="cuisine-filter">
+        {CUISINES.map((c) => (
+          <button key={c} className={cuisine === c ? "active" : ""} onClick={() => setCuisine(c)}>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p>Loading menu...</p>}
+
+      <div className="menu-items">
+        {filtered.map((item) => (
+          <Link to={`/order?item=${item._id}`} className="menu-item" key={item._id}>
+            <img src={item.imageUrl || "/dinner1.jpeg"} alt={item.name} className="burger-image" />
+            <div className="menu-item-body">
+              <span className="menu-link">
+                <span className={`veg-dot ${item.isVeg ? "" : "nonveg"}`}></span>
+                {item.name}
+              </span>
+              <p className="menu-item-desc">{item.description}</p>
+              <div className="menu-item-meta">
+                <span>{item.calories ? `${item.calories} kcal` : item.category}</span>
+                <span className="menu-item-price">&#8377;{item.price}</span>
+              </div>
             </div>
-        </div>
-    );
-}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default Menu2;

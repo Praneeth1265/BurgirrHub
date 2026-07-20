@@ -8,6 +8,7 @@ import './App.css'
 import Reservation from './Pages/Reservation/Reservation';
 import Menu2 from './Pages/Menu/Menu2'
 import Login from './Pages/Login/Login';
+import ManagerLogin from './Pages/Login/ManagerLogin';
 import ManagerDashboard from './Pages/ManagerDashboard/ManagerDashboard';
 import OrderMenu from './Pages/Order/OrderMenu';
 import Checkout from './Pages/Order/Checkout';
@@ -30,6 +31,7 @@ const App = () => {
               <Route path='/reservations' element={<Reservation/>}/>
               <Route path='/menu2' element={<Menu2/>}/>
               <Route path="/login" element={<Login />} />
+              <Route path="/manager-access" element={<ManagerLogin />} />
               <Route
                 path="/manager-dashboard"
                 element={

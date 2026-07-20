@@ -27,6 +27,14 @@ const ManagerDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
+  const [branches, setBranches] = useState([]);
+  const [seatEdits, setSeatEdits] = useState({});
+  const [loadingBranches, setLoadingBranches] = useState(true);
+
+  const [menuItems, setMenuItems] = useState([]);
+  const [stockEdits, setStockEdits] = useState({});
+  const [loadingMenu, setLoadingMenu] = useState(true);
+
   const fetchReservations = useCallback(async () => {
     setLoadingReservations(true);
     try {
@@ -59,10 +67,38 @@ const ManagerDashboard = () => {
     }
   }, []);
 
+  const fetchBranches = useCallback(async () => {
+    setLoadingBranches(true);
+    try {
+      const { data } = await gatewayClient.get("/branches");
+      setBranches(data.branches);
+      setSeatEdits(Object.fromEntries(data.branches.map((b) => [b._id, b.availableSeats])));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load branches");
+    } finally {
+      setLoadingBranches(false);
+    }
+  }, []);
+
+  const fetchMenu = useCallback(async () => {
+    setLoadingMenu(true);
+    try {
+      const { data } = await gatewayClient.get("/menu", { params: { all: true } });
+      setMenuItems(data.items);
+      setStockEdits(Object.fromEntries(data.items.map((i) => [i._id, i.stock ?? ""])));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load menu");
+    } finally {
+      setLoadingMenu(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchReservations();
     fetchOrders();
-  }, [fetchReservations, fetchOrders]);
+    fetchBranches();
+    fetchMenu();
+  }, [fetchReservations, fetchOrders, fetchBranches, fetchMenu]);
 
   const deleteReservation = async (id, branchName) => {
     try {
@@ -73,6 +109,7 @@ const ManagerDashboard = () => {
         updated[branchName] = updated[branchName].filter((r) => r._id !== id);
         return updated;
       });
+      fetchBranches();
     } catch (error) {
       toast.error(error.response?.data?.message || "Error deleting reservation");
     }
@@ -92,8 +129,48 @@ const ManagerDashboard = () => {
     setSelectedBranch((prev) => (prev === branchName ? null : branchName));
   };
 
+  const saveSeats = async (branchId) => {
+    const value = Number(seatEdits[branchId]);
+    if (Number.isNaN(value) || value < 0) {
+      toast.error("Enter a valid seat count");
+      return;
+    }
+    try {
+      const { data } = await gatewayClient.patch(`/branches/${branchId}`, { availableSeats: value });
+      setBranches((prev) => prev.map((b) => (b._id === branchId ? data.branch : b)));
+      toast.success("Seat availability updated");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update seats");
+    }
+  };
+
+  const saveStock = async (itemId) => {
+    const raw = stockEdits[itemId];
+    const value = raw === "" ? null : Number(raw);
+    if (value !== null && (Number.isNaN(value) || value < 0)) {
+      toast.error("Enter a valid stock count");
+      return;
+    }
+    try {
+      const { data } = await gatewayClient.patch(`/menu/${itemId}`, { stock: value });
+      setMenuItems((prev) => prev.map((i) => (i._id === itemId ? data.item : i)));
+      toast.success(`${data.item.name} stock updated`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update stock");
+    }
+  };
+
+  const toggleAvailability = async (item) => {
+    try {
+      const { data } = await gatewayClient.patch(`/menu/${item._id}`, { isAvailable: !item.isAvailable });
+      setMenuItems((prev) => prev.map((i) => (i._id === item._id ? data.item : i)));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update availability");
+    }
+  };
+
   return (
-    <div style={{ padding: "20px" }}>
+    <div style={{ paddingBottom: 60 }}>
       <div className="manager-header">
         <a href="/" className="back-to-home-btn">
           Back to Home
@@ -109,12 +186,15 @@ const ManagerDashboard = () => {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, margin: "100px 0 20px" }}>
-        <button className="btn" onClick={() => setTab("reservations")} disabled={tab === "reservations"}>
+      <div className="dash-tabs">
+        <button className={`dash-tab ${tab === "reservations" ? "active" : ""}`} onClick={() => setTab("reservations")}>
           Reservations
         </button>
-        <button className="btn" onClick={() => setTab("orders")} disabled={tab === "orders"}>
+        <button className={`dash-tab ${tab === "orders" ? "active" : ""}`} onClick={() => setTab("orders")}>
           Orders
+        </button>
+        <button className={`dash-tab ${tab === "availability" ? "active" : ""}`} onClick={() => setTab("availability")}>
+          Availability
         </button>
       </div>
 
@@ -139,6 +219,7 @@ const ManagerDashboard = () => {
                       <div>EMAIL: {reservation.email}</div>
                       <div>DATE: {reservation.date}</div>
                       <div>TIME: {reservation.time}</div>
+                      <div>GUESTS: {reservation.guests ?? "-"}</div>
                       <div>PHONE: {reservation.phone}</div>
                       <div className="delete-btn-container">
                         <button onClick={() => deleteReservation(reservation._id, branchName)}>Delete</button>
@@ -178,6 +259,80 @@ const ManagerDashboard = () => {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === "availability" && (
+        <div className="availability-section">
+          <h3>Seat Availability</h3>
+          {loadingBranches && <p>Loading branches...</p>}
+          <div className="branch-availability-grid">
+            {branches.map((b) => (
+              <div className="branch-availability-card" key={b._id}>
+                <h4>{b.name}</h4>
+                <div className="capacity-note">Capacity: {b.capacity} seats</div>
+                <div className="availability-edit-row">
+                  <input
+                    type="number"
+                    min="0"
+                    max={b.capacity}
+                    value={seatEdits[b._id] ?? ""}
+                    onChange={(e) => setSeatEdits((prev) => ({ ...prev, [b._id]: e.target.value }))}
+                  />
+                  <button className="btn" onClick={() => saveSeats(b._id)}>
+                    Save
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h3>Menu Stock</h3>
+          {loadingMenu && <p>Loading menu...</p>}
+          <div className="stock-table-wrap">
+            <table className="stock-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {menuItems.map((item) => (
+                  <tr key={item._id}>
+                    <td>{item.name}</td>
+                    <td>{item.category}</td>
+                    <td>&#8377;{item.price}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="∞"
+                          value={stockEdits[item._id] ?? ""}
+                          onChange={(e) => setStockEdits((prev) => ({ ...prev, [item._id]: e.target.value }))}
+                        />
+                        <button className="btn" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => saveStock(item._id)}>
+                          Save
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        className={`toggle-btn ${item.isAvailable ? "available" : "unavailable"}`}
+                        onClick={() => toggleAvailability(item)}
+                      >
+                        {item.isAvailable ? "Available" : "Unavailable"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

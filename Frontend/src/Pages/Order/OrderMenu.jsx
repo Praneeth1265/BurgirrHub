@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { gatewayClient } from "../../api/client";
 import { useCart } from "../../context/CartContext";
+
+const CUISINES = ["All", "American", "Italian", "Chinese"];
+const GST_RATE = 0.05; // 2.5% CGST + 2.5% SGST, matches Checkout.jsx
 
 const OrderMenu = () => {
   const { branch, setBranch, items, addItem, updateQuantity, subtotal, itemCount } = useCart();
   const [branches, setBranches] = useState([]);
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cuisine, setCuisine] = useState("All");
+  const [cartOpen, setCartOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("item");
+  const hasScrolled = useRef(false);
 
   useEffect(() => {
     gatewayClient
@@ -33,73 +41,169 @@ const OrderMenu = () => {
       .finally(() => setLoading(false));
   }, [branch]);
 
+  useEffect(() => {
+    if (!highlightId || loading || hasScrolled.current || menu.length === 0) return;
+    const el = document.getElementById(`item-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      hasScrolled.current = true;
+    }
+  }, [highlightId, loading, menu]);
+
   const quantityInCart = (menuItemId) => items.find((i) => i.menuItemId === menuItemId)?.quantity || 0;
 
-  const grouped = menu.reduce((acc, item) => {
+  const filteredMenu = useMemo(
+    () => (cuisine === "All" ? menu : menu.filter((m) => m.cuisine === cuisine)),
+    [menu, cuisine]
+  );
+
+  const grouped = filteredMenu.reduce((acc, item) => {
     (acc[item.category] ||= []).push(item);
     return acc;
   }, {});
 
+  const gst = subtotal * GST_RATE;
+  const grandTotal = subtotal + gst;
+
   return (
-    <div className="menu-container">
+    <div className="order-page">
       <a href="/" className="back-to-home-btn">
         Back to Home
       </a>
-      <h1 className="menu-title">Order Online</h1>
 
-      <div className="order-branch-select">
-        <label htmlFor="order-branch">Branch: </label>
-        <select id="order-branch" value={branch} onChange={(e) => setBranch(e.target.value)}>
-          {branches.map((b) => (
-            <option key={b._id} value={b.name}>
-              {b.name}
-            </option>
+      <div className="order-main">
+        <h1 className="menu-title" style={{ marginTop: 60 }}>
+          Order Online
+        </h1>
+        <p className="menu-subtitle" style={{ marginBottom: 20 }}>
+          Dine-in ordering &mdash; skip the queue, order straight to your table.
+        </p>
+
+        <div className="order-branch-select">
+          <label htmlFor="order-branch">Branch:</label>
+          <select id="order-branch" value={branch} onChange={(e) => setBranch(e.target.value)}>
+            {branches.map((b) => (
+              <option key={b._id} value={b.name}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="cuisine-filter">
+          {CUISINES.map((c) => (
+            <button key={c} className={cuisine === c ? "active" : ""} onClick={() => setCuisine(c)}>
+              {c}
+            </button>
           ))}
-        </select>
+        </div>
+
+        {loading && <p>Loading menu...</p>}
+
+        {!loading &&
+          Object.entries(grouped).map(([category, categoryItems]) => (
+            <div key={category} className="order-category">
+              <h2>{category}</h2>
+              <div className="order-items-grid">
+                {categoryItems.map((item) => {
+                  const qty = quantityInCart(item._id);
+                  const outOfStock = !item.isAvailable || item.stock === 0;
+                  return (
+                    <div
+                      className={`order-item-card ${highlightId === item._id ? "highlighted" : ""}`}
+                      key={item._id}
+                      id={`item-${item._id}`}
+                    >
+                      <div className="order-item-top">
+                        <div className="order-item-name">
+                          <span className={`veg-dot ${item.isVeg ? "" : "nonveg"}`}></span>
+                          {item.name}
+                        </div>
+                      </div>
+                      <div className="order-item-desc">{item.description}</div>
+                      {item.ingredients?.length > 0 && (
+                        <div className="order-item-ingredients">{item.ingredients.join(", ")}</div>
+                      )}
+                      <div className="order-item-tags">
+                        <span>{item.cuisine}</span>
+                        {item.calories && <span>&middot; {item.calories} kcal</span>}
+                      </div>
+                      <div className="order-item-price">&#8377;{item.price}</div>
+                      {outOfStock ? (
+                        <span className="order-item-oos">Out of stock</span>
+                      ) : qty === 0 ? (
+                        <button className="btn" onClick={() => addItem(item)}>
+                          Add to cart
+                        </button>
+                      ) : (
+                        <div className="order-item-stepper">
+                          <button onClick={() => updateQuantity(item._id, qty - 1)}>-</button>
+                          <span>{qty}</span>
+                          <button onClick={() => updateQuantity(item._id, qty + 1)}>+</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
       </div>
 
-      {loading && <p>Loading menu...</p>}
-
-      {!loading &&
-        Object.entries(grouped).map(([category, categoryItems]) => (
-          <div key={category} className="order-category">
-            <h2>{category}</h2>
-            <div className="order-items-grid">
-              {categoryItems.map((item) => {
-                const qty = quantityInCart(item._id);
-                return (
-                  <div className="order-item-card" key={item._id}>
-                    <div className="order-item-name">{item.name}</div>
-                    <div className="order-item-desc">{item.description}</div>
-                    <div className="order-item-price">&#8377;{item.price}</div>
-                    {qty === 0 ? (
-                      <button className="btn" onClick={() => addItem(item)}>
-                        Add to cart
-                      </button>
-                    ) : (
-                      <div className="order-item-stepper">
-                        <button onClick={() => updateQuantity(item._id, qty - 1)}>-</button>
-                        <span>{qty}</span>
-                        <button onClick={() => updateQuantity(item._id, qty + 1)}>+</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
-      {itemCount > 0 && (
-        <div className="cart-summary-bar">
+      <div className={`cart-panel ${cartOpen ? "expanded" : ""}`}>
+        <div className="cart-fab" onClick={() => setCartOpen((v) => !v)}>
+          <h3>Your Cart</h3>
           <span>
-            {itemCount} item{itemCount > 1 ? "s" : ""} &middot; &#8377;{subtotal}
+            {itemCount} item{itemCount !== 1 ? "s" : ""} &middot; &#8377;{grandTotal.toFixed(0)}
           </span>
-          <Link to="/order/checkout" className="btn">
-            Checkout
-          </Link>
         </div>
-      )}
+        <h3 className="cart-panel-title-desktop">Your Cart</h3>
+
+        {items.length === 0 ? (
+          <p className="cart-panel-empty">Your cart is empty. Add a dish to get started.</p>
+        ) : (
+          <>
+            <div className="cart-items">
+              {items.map((i) => (
+                <div className="cart-line" key={i.menuItemId}>
+                  <div>
+                    <div className="cart-line-name">{i.name}</div>
+                    <div className="cart-line-price">&#8377;{i.price} each</div>
+                  </div>
+                  <div className="cart-line-controls">
+                    <button onClick={() => updateQuantity(i.menuItemId, i.quantity - 1)}>-</button>
+                    <span>{i.quantity}</span>
+                    <button onClick={() => updateQuantity(i.menuItemId, i.quantity + 1)}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="cart-totals">
+              <div className="cart-total-row">
+                <span>Subtotal</span>
+                <span>&#8377;{subtotal.toFixed(2)}</span>
+              </div>
+              <div className="cart-total-row">
+                <span>CGST (2.5%)</span>
+                <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
+              </div>
+              <div className="cart-total-row">
+                <span>SGST (2.5%)</span>
+                <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
+              </div>
+              <div className="cart-total-row cart-grand-total">
+                <span>Total</span>
+                <span>&#8377;{grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <Link to="/order/checkout" className="btn">
+              Checkout
+            </Link>
+          </>
+        )}
+      </div>
     </div>
   );
 };

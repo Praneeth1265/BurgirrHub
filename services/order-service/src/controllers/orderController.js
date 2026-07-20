@@ -34,10 +34,28 @@ export const createOrder = async (req, res, next) => {
       if (menuItem.branches.length && !menuItem.branches.includes(branch)) {
         throw new ErrorHandler(`${menuItem.name} is not available at ${branch}`, 400);
       }
+      // stock === null means unlimited/untracked -- only items with a real
+      // stock count are checked and decremented.
+      if (menuItem.stock !== null && menuItem.stock < quantity) {
+        throw new ErrorHandler(`${menuItem.name} only has ${menuItem.stock} left in stock`, 400);
+      }
       const lineTotal = menuItem.price * quantity;
       totalAmount += lineTotal;
       return { menuItem: menuItem._id, name: menuItem.name, price: menuItem.price, quantity };
     });
+
+    // Decrement stock after every line has passed validation above (so a
+    // failure partway through the cart doesn't leave stock decremented for
+    // only some items). Auto-flips isAvailable off once stock hits 0.
+    for (const { menuItemId, quantity } of items) {
+      const menuItem = menuItemMap.get(menuItemId);
+      if (menuItem.stock === null) continue;
+      const remaining = menuItem.stock - quantity;
+      await MenuItem.updateOne(
+        { _id: menuItem._id },
+        { stock: remaining, isAvailable: remaining > 0 }
+      );
+    }
 
     const order = await Order.create({
       customerId: req.user.sub,

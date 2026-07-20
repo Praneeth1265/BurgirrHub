@@ -43,6 +43,8 @@ router.get("/reservations", globalLimiter, verifyJwt, requireRole("staff", "admi
 router.delete("/reservations/:id", globalLimiter, verifyJwt, requireRole("staff", "admin"), reservationProxy);
 router.get("/branches", globalLimiter, reservationProxy);
 router.get("/branches/:id", globalLimiter, reservationProxy);
+// Seat-availability edits from the manager dashboard's Availability tab.
+router.patch("/branches/:id", globalLimiter, verifyJwt, requireRole("staff", "admin"), reservationProxy);
 
 // --- Order Service ---
 // Menu browsing is public. Placing/viewing orders just needs to be logged
@@ -55,6 +57,8 @@ router.post("/orders", globalLimiter, verifyJwt, orderProxy);
 router.get("/orders", globalLimiter, verifyJwt, orderProxy);
 router.get("/orders/:id", globalLimiter, verifyJwt, orderProxy);
 router.patch("/orders/:id/status", globalLimiter, verifyJwt, requireRole("staff", "admin"), orderProxy);
+// Stock/availability/price edits from the manager dashboard's Availability tab.
+router.patch("/menu/:id", globalLimiter, verifyJwt, requireRole("staff", "admin"), orderProxy);
 
 // --- Payment Service ---
 // Creating a PaymentIntent needs the caller logged in (ownership is
@@ -65,6 +69,9 @@ router.patch("/orders/:id/status", globalLimiter, verifyJwt, requireRole("staff"
 // chain -- the Gateway never calls express.json() at all, so the raw
 // bytes Stripe signed reach the Payment Service completely untouched.
 router.post("/payments/:orderId/intent", globalLimiter, verifyJwt, paymentProxy);
+// Fully simulated UPI confirmation (no real gateway) -- same auth
+// requirement as creating a Stripe intent, just a different settlement path.
+router.post("/payments/:orderId/confirm-dummy-upi", globalLimiter, verifyJwt, paymentProxy);
 router.post("/payments/webhook", paymentProxy);
 
 // --- Notification Service ---

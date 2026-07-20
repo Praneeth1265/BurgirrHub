@@ -32,17 +32,26 @@ const Login = () => {
   };
 
   return (
-    <div className="manparent">
-      <div className="manlog">
-        <h1>Sign In</h1>
-        <div
-          className="manform"
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}
-        >
-          <GoogleSignInButton onCredential={handleCredential} />
-          <a href="/" className="back-to-home-btn">
-            Back to Home
-          </a>
+    <div className="auth-shell">
+      <div className="auth-visual auth-visual--customer">
+        <div className="auth-brand">BurgirrHUB</div>
+        <h1>Pull up a chair at our table.</h1>
+        <p>
+          Sign in to book a table, order ahead for pickup, and keep track of
+          every meal you've shared with us &mdash; countryside comfort, served
+          your way.
+        </p>
+      </div>
+      <div className="auth-form-panel">
+        <div className="auth-card">
+          <h2>Sign In</h2>
+          <p className="auth-subtitle">Continue with Google to reserve a table or order online.</p>
+          <div className="manform">
+            <GoogleSignInButton onCredential={handleCredential} />
+            <a href="/" className="back-to-home-btn back-to-home-btn--inline">
+              Back to Home
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -1,29 +1,52 @@
-import React from 'react'
-import {data} from '../restApi.json'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { gatewayClient } from "../api/client";
+
 const Menu = () => {
+  const [dishes, setDishes] = useState([]);
+
+  useEffect(() => {
+    gatewayClient
+      .get("/menu", { params: { popular: true } })
+      .then(({ data }) => setDishes(data.items))
+      .catch(() => setDishes([]));
+  }, []);
+
   return (
     <>
-      <section className='menu' id='menu'>
+      <section className="menu" id="menu">
         <div className="container">
-            <div className="heading_section">
-                <h1 className="heading">POPULAR DISHES</h1>
-                <p>At BurgirrHUB, our menu is packed with mouthwatering options, but there are a few dishes that have become absolute fan favorites. These are the creations that keep our guests coming back for more, time and time again. Crafted with the freshest ingredients and bursting with flavor, our popular dishes are a must-try for anyone looking to experience the best of what we offer.</p>
-            </div>
-            <div className="dishes_container">
-                {
-                    data[0].dishes.map(element => (
-                        <div className="card" key={element.id}>
-                                <img src={element.image} alt={element.title} />
-                                <h3>{element.title}</h3>
-                                <Link to={'/menu2'}><button>{element.category}</button></Link>
-                        </div>
-                    ))
-                }
-            </div>
+          <div className="heading_section">
+            <span className="section-eyebrow">Fan Favorites</span>
+            <h1 className="heading">POPULAR DISHES</h1>
+            <p>
+              At BurgirrHUB, our menu is packed with mouthwatering options
+              spanning American, Italian and Chinese kitchens, but there are a
+              few dishes that have become absolute fan favorites &mdash; the
+              creations our guests keep coming back for.
+            </p>
+          </div>
+          <div className="dishes_container">
+            {dishes.map((item) => (
+              <Link to={`/order?item=${item._id}`} className="card" key={item._id}>
+                <button>{item.cuisine}</button>
+                <img src={item.imageUrl || "/dinner1.jpeg"} alt={item.name} />
+                <div className="card-body">
+                  <h3>{item.name}</h3>
+                  <div className="card-meta">
+                    <span>{item.category}</span>
+                    <span className="card-price">&#8377;{item.price}</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+          <Link to="/menu2" className="btn menu-view-all">
+            View Full Menu
+          </Link>
         </div>
       </section>
     </>
-  )
-}
-export default Menu
+  );
+};
+export default Menu;

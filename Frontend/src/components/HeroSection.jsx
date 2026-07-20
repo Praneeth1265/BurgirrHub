@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../App.css"
 
 const slides = [
@@ -39,44 +40,70 @@ const slides = [
   },
 ];
 
+const AUTOPLAY_MS = 3000;
+
 const HeroSection = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const navigate = useNavigate();
+  const timerRef = useRef(null);
+
+  const restartTimer = () => {
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCurrentSlideIndex((prevIndex) => (prevIndex + 1) % slides.length);
+    }, AUTOPLAY_MS);
+  };
+
+  useEffect(() => {
+    restartTimer();
+    return () => clearInterval(timerRef.current);
+  }, []);
 
   const nextSlide = () => {
     setCurrentSlideIndex((prevIndex) => (prevIndex + 1) % slides.length);
+    restartTimer();
   };
 
   const prevSlide = () => {
-    setCurrentSlideIndex((prevIndex) =>prevIndex === 0 ? slides.length - 1 : prevIndex - 1);
+    setCurrentSlideIndex((prevIndex) => (prevIndex === 0 ? slides.length - 1 : prevIndex - 1));
+    restartTimer();
   };
 
   const currentSlide = slides[currentSlideIndex];
 
   return (
     <section className="heroSection">
-        <img src="../bigchef.png" alt="" className="chef" />
-      <div className="slideshow-container">
-        <button className="prev-button" onClick={prevSlide}>
-          &#10094;
-        </button>
+      <div className="hero-inner">
+        <img
+          src="../bigchef.png"
+          alt=""
+          className="chef"
+          onDoubleClick={() => navigate("/manager-access")}
+          title=""
+        />
+        <div className="slideshow-container">
+          <button className="prev-button" onClick={prevSlide}>
+            &#10094;
+          </button>
 
-        <div className="slide-content">
-          <img
-            src={currentSlide.image}
-            alt={currentSlide.title}
-            className="slide-image"
-          />
-          <div className="text-content">
-            <h1 className="tod_spl">Today’s Temptation</h1>
-            <h2 className="slide-title">{currentSlide.title}</h2>
-            <p className="slide-subtitle">{currentSlide.subtitle}</p>
-            <p className="slide-description">{currentSlide.description}</p>
+          <div className="slide-content">
+            <img
+              src={currentSlide.image}
+              alt={currentSlide.title}
+              className="slide-image"
+            />
+            <div className="text-content">
+              <h1 className="tod_spl">Today’s Temptation</h1>
+              <h2 className="slide-title">{currentSlide.title}</h2>
+              <p className="slide-subtitle">{currentSlide.subtitle}</p>
+              <p className="slide-description">{currentSlide.description}</p>
+            </div>
           </div>
-        </div>
 
-        <button className="next-button" onClick={nextSlide}>
-          &#10095;
-        </button>
+          <button className="next-button" onClick={nextSlide}>
+            &#10095;
+          </button>
+        </div>
       </div>
     </section>
   );
