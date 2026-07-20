@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import GoogleSignInButton from "../../components/GoogleSignInButton";
@@ -48,9 +48,9 @@ const Login = () => {
           <p className="auth-subtitle">Continue with Google to reserve a table or order online.</p>
           <div className="manform">
             <GoogleSignInButton onCredential={handleCredential} />
-            <a href="/" className="back-to-home-btn back-to-home-btn--inline">
+            <Link to="/" className="back-to-home-btn back-to-home-btn--inline">
               Back to Home
-            </a>
+            </Link>
           </div>
         </div>
       </div>

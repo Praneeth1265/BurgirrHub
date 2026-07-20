@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { gatewayClient } from "../../api/client";
 
@@ -30,9 +31,9 @@ const OrderHistory = () => {
 
   return (
     <div className="menu-container">
-      <a href="/" className="back-to-home-btn">
+      <Link to="/" className="back-to-home-btn">
         Back to Home
-      </a>
+      </Link>
       <h1 className="menu-title">My Orders</h1>
       <p className="menu-subtitle">Every bill from your past dine-in orders, in one place.</p>
 

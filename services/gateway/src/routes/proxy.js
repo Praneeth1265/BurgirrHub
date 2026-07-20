@@ -32,13 +32,16 @@ router.use("/auth/refresh", authLimiter, authProxy);
 router.use("/auth", globalLimiter, authProxy);
 
 // --- Reservation Service ---
-// Creating a reservation stays public/anonymous, matching the current
-// app's UX (no customer accounts exist). Listing and deleting are
-// staff/admin only, checked here (coarse-grained, saves a hop to a
-// service that would reject anyway) and again inside the Reservation
-// Service itself (fine-grained, per-branch ownership) -- defense in
-// depth per the Notion LLD design.
-router.post("/reservations", globalLimiter, reservationProxy);
+// Creating a reservation now requires being logged in (same gate as
+// placing an order) -- it's also what "mine" below depends on to know
+// whose booking is whose. Listing everything and deleting are staff/admin
+// only, checked here (coarse-grained, saves a hop to a service that would
+// reject anyway) and again inside the Reservation Service itself
+// (fine-grained, per-branch ownership) -- defense in depth per the Notion
+// LLD design.
+router.post("/reservations", globalLimiter, verifyJwt, reservationProxy);
+// Own-bookings view for the homepage reminder widget -- any signed-in role.
+router.get("/reservations/mine", globalLimiter, verifyJwt, reservationProxy);
 router.get("/reservations", globalLimiter, verifyJwt, requireRole("staff", "admin"), reservationProxy);
 router.delete("/reservations/:id", globalLimiter, verifyJwt, requireRole("staff", "admin"), reservationProxy);
 router.get("/branches", globalLimiter, reservationProxy);

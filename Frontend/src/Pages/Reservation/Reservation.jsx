@@ -4,8 +4,10 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { gatewayClient } from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 
 const Reservation = () => {
+  const { user } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,6 +19,17 @@ const Reservation = () => {
   const [branches, setBranches] = useState([]);
   const [booked, setBooked] = useState(false);
   const navigate = useNavigate();
+
+  // Reservations require sign-in now, so prefill from the account instead
+  // of asking for a name/email it already has -- both stay editable in
+  // case someone's booking under a different contact.
+  useEffect(() => {
+    if (!user) return;
+    setEmail((prev) => prev || user.email || "");
+    const [first, ...restName] = (user.name || "").split(" ");
+    setFirstName((prev) => prev || first || "");
+    setLastName((prev) => prev || restName.join(" ") || "");
+  }, [user]);
 
   // Branches are now real documents (name, address, hours) served by the
   // Reservation Service, not a hardcoded string enum baked into this form

@@ -25,9 +25,9 @@ const Menu2 = () => {
 
   return (
     <div className="menu-container">
-      <a href="/" className="back-to-home-btn">
+      <Link to="/" className="back-to-home-btn">
         Back to Home
-      </a>
+      </Link>
       <h1 className="menu-title">Our Menu</h1>
       <p className="menu-subtitle">
         From countryside classics to Italian and Chinese favorites &mdash; tap

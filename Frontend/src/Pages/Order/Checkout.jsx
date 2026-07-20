@@ -155,9 +155,9 @@ const Checkout = () => {
   if (items.length === 0) {
     return (
       <div className="checkout-page">
-        <a href="/" className="back-to-home-btn">
+        <Link to="/" className="back-to-home-btn">
           Back to Home
-        </a>
+        </Link>
         <h1 className="menu-title" style={{ marginTop: 80 }}>
           Checkout
         </h1>
@@ -169,9 +169,9 @@ const Checkout = () => {
 
   return (
     <div className="checkout-page">
-      <a href="/" className="back-to-home-btn">
+      <Link to="/" className="back-to-home-btn">
         Back to Home
-      </a>
+      </Link>
 
       <div className="checkout-summary" style={{ marginTop: 90 }}>
         <div className="checkout-summary-header">

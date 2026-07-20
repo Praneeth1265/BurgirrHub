@@ -28,7 +28,14 @@ const App = () => {
               <Route path='/' element={<Home/>}/>
               <Route path='/success' element={<Success/>}/>
               <Route path='*' element={<NotFound/>}/>
-              <Route path='/reservations' element={<Reservation/>}/>
+              <Route
+                path='/reservations'
+                element={
+                  <RequireAuth>
+                    <Reservation/>
+                  </RequireAuth>
+                }
+              />
               <Route path='/menu2' element={<Menu2/>}/>
               <Route path="/login" element={<Login />} />
               <Route path="/manager-access" element={<ManagerLogin />} />

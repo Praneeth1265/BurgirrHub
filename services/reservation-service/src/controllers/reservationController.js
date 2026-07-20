@@ -3,9 +3,9 @@ import { Branch } from "../models/branch.js";
 import { ErrorHandler } from "../error/error.js";
 import { publishEvent } from "../utils/publisher.js";
 
-// Creating a reservation stays public/anonymous -- the current app has no
-// customer accounts, and this phase doesn't add any, so this matches the
-// existing UX rather than inventing a login requirement that didn't exist.
+// Reservations now require a signed-in account (previously public/
+// anonymous) -- matches the same "must be logged in" gate as placing an
+// order, and is what makes "see my upcoming reservation" possible at all.
 export const createReservation = async (req, res, next) => {
   try {
     const { branchId, ...rest } = req.body;
@@ -22,7 +22,7 @@ export const createReservation = async (req, res, next) => {
       );
     }
 
-    const reservation = await Reservation.create({ ...rest, branch: branch._id });
+    const reservation = await Reservation.create({ ...rest, branch: branch._id, customerId: req.user.sub });
     branch.availableSeats = seatsLeft - rest.guests;
     await branch.save();
 
@@ -58,6 +58,21 @@ export const listReservations = async (req, res, next) => {
     }
 
     const reservations = await Reservation.find(filter)
+      .populate("branch", "name address")
+      .sort("-createdAt");
+
+    res.status(200).json({ success: true, count: reservations.length, reservations });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Powers the homepage's floating reservation reminder -- any signed-in
+// customer can see their own bookings, no role restriction (unlike
+// listReservations, which is the staff/admin management view).
+export const listMyReservations = async (req, res, next) => {
+  try {
+    const reservations = await Reservation.find({ customerId: req.user.sub })
       .populate("branch", "name address")
       .sort("-createdAt");
 

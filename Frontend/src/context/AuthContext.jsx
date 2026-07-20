@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { gatewayClient, setAccessToken } from "../api/client";
+import { gatewayClient, setAccessToken, setAuthExpiredHandler } from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -11,6 +11,16 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
   }, []);
+
+  // The gatewayClient's response interceptor calls this when a request's
+  // silent refresh-and-retry (see api/client.js) itself fails -- meaning
+  // the refresh cookie is genuinely gone (expired/logged out elsewhere),
+  // not just an expired 15-minute access token. Without this, `user`
+  // would keep saying "signed in" while every API call quietly 401s.
+  useEffect(() => {
+    setAuthExpiredHandler(clearSession);
+    return () => setAuthExpiredHandler(null);
+  }, [clearSession]);
 
   // On mount, try to restore a session via the httpOnly refreshToken
   // cookie the Auth Service set on a previous login -- this is what makes

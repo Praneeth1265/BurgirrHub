@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createReservation,
   listReservations,
+  listMyReservations,
   deleteReservation,
 } from "../controllers/reservationController.js";
 import { validate } from "../middleware/validate.js";
@@ -24,7 +25,8 @@ const createReservationSchema = z.object({
   guests: z.number().int().min(1, "At least 1 guest is required").max(20, "For parties over 20, please call the branch"),
 });
 
-router.post("/", validate(createReservationSchema), createReservation);
+router.post("/", authenticate, validate(createReservationSchema), createReservation);
+router.get("/mine", authenticate, listMyReservations);
 router.get("/", authenticate, requireRole("staff", "admin"), listReservations);
 router.delete("/:id", authenticate, requireRole("staff", "admin"), deleteReservation);
 

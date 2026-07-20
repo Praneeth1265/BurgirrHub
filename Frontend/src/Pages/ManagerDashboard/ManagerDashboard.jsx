@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { gatewayClient } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
@@ -172,9 +173,9 @@ const ManagerDashboard = () => {
   return (
     <div style={{ paddingBottom: 60 }}>
       <div className="manager-header">
-        <a href="/" className="back-to-home-btn">
+        <Link to="/" className="back-to-home-btn">
           Back to Home
-        </a>
+        </Link>
         <h1>Manager Dashboard</h1>
         <div className="manager-header-right">
           <span>

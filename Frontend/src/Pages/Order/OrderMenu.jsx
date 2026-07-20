@@ -67,9 +67,9 @@ const OrderMenu = () => {
 
   return (
     <div className="order-page">
-      <a href="/" className="back-to-home-btn">
+      <Link to="/" className="back-to-home-btn">
         Back to Home
-      </a>
+      </Link>
 
       <div className="order-main">
         <h1 className="menu-title" style={{ marginTop: 60 }}>
