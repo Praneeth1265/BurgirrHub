@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import toast from "react-hot-toast";
@@ -93,14 +93,54 @@ const UpiPaymentForm = ({ orderId, amount, onSuccess }) => {
 };
 
 const Checkout = () => {
-  const { branch, items, subtotal, clearCart } = useCart();
+  const { branch, items, clearCart } = useCart();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Present when arriving from "Pay Now" on an existing pending order
+  // (see OrderHistory) rather than from the cart -- skips order creation
+  // entirely and just resumes payment on that order.
+  const resumeOrderId = searchParams.get("orderId");
+
   const [orderId, setOrderId] = useState(null);
+  const [resumedOrder, setResumedOrder] = useState(null);
+  const [loadingResume, setLoadingResume] = useState(!!resumeOrderId);
+  const [availableIds, setAvailableIds] = useState(null); // null = not loaded yet
   const [clientSecret, setClientSecret] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [payMethod, setPayMethod] = useState("upi");
   const [cardLoading, setCardLoading] = useState(false);
 
+  useEffect(() => {
+    if (resumeOrderId) {
+      gatewayClient
+        .get(`/orders/${resumeOrderId}`)
+        .then(({ data }) => {
+          setResumedOrder(data.order);
+          setOrderId(data.order._id);
+        })
+        .catch((error) => toast.error(error.response?.data?.message || "Failed to load order"))
+        .finally(() => setLoadingResume(false));
+      return;
+    }
+    if (!branch) return;
+    // Cart can now carry items from a branch switch (see CartContext) --
+    // cross-check against this branch's live menu so a stale/branch-
+    // exclusive item never gets submitted in the order below (the server
+    // would reject the whole order for it otherwise).
+    gatewayClient
+      .get("/menu", { params: { branch } })
+      .then(({ data }) => setAvailableIds(new Set(data.items.map((i) => i._id))))
+      .catch(() => setAvailableIds(new Set()));
+  }, [resumeOrderId, branch]);
+
+  const availableItems = availableIds ? items.filter((i) => availableIds.has(i.menuItemId)) : [];
+  const unavailableItems = availableIds ? items.filter((i) => !availableIds.has(i.menuItemId)) : [];
+
+  const billItems = resumeOrderId
+    ? (resumedOrder?.items || []).map((i) => ({ menuItemId: i.menuItem, name: i.name, price: i.price, quantity: i.quantity }))
+    : availableItems;
+  const billBranch = resumeOrderId ? resumedOrder?.branch : branch;
+  const subtotal = billItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const gst = subtotal * GST_RATE;
   const grandTotal = subtotal + gst;
 
@@ -110,7 +150,7 @@ const Checkout = () => {
     try {
       const { data: orderData } = await gatewayClient.post("/orders", {
         branch,
-        items: items.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
+        items: availableItems.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
       });
       const newOrderId = orderData.order._id;
       setOrderId(newOrderId);
@@ -144,7 +184,7 @@ const Checkout = () => {
   };
 
   const handlePaymentSuccess = (status) => {
-    clearCart();
+    if (!resumeOrderId) clearCart();
     // The order's status flip to "confirmed" is webhook/event-driven (see
     // paymentEventsConsumer), not decided by this response -- this page
     // can only honestly say the payment was submitted, not that the order
@@ -152,7 +192,35 @@ const Checkout = () => {
     navigate("/order/success", { state: { orderId, paymentStatus: status || "submitted" } });
   };
 
-  if (items.length === 0) {
+  if (loadingResume) {
+    return (
+      <div className="checkout-page">
+        <Link to="/" className="back-to-home-btn">
+          Back to Home
+        </Link>
+        <p style={{ marginTop: 90 }}>Loading order...</p>
+      </div>
+    );
+  }
+
+  if (resumeOrderId && resumedOrder && resumedOrder.status !== "pending") {
+    return (
+      <div className="checkout-page">
+        <Link to="/" className="back-to-home-btn">
+          Back to Home
+        </Link>
+        <h1 className="menu-title" style={{ marginTop: 80 }}>
+          Checkout
+        </h1>
+        <p>
+          This order is already <strong>{resumedOrder.status}</strong> &mdash; nothing left to pay.
+        </p>
+        <Link to="/orders/history">Back to My Orders</Link>
+      </div>
+    );
+  }
+
+  if (!resumeOrderId && items.length === 0) {
     return (
       <div className="checkout-page">
         <Link to="/" className="back-to-home-btn">
@@ -176,10 +244,10 @@ const Checkout = () => {
       <div className="checkout-summary" style={{ marginTop: 90 }}>
         <div className="checkout-summary-header">
           <h2>BurgirrHUB</h2>
-          <span>{branch}</span>
+          <span>{billBranch}</span>
         </div>
 
-        {items.map((i) => (
+        {billItems.map((i) => (
           <div className="checkout-line" key={i.menuItemId}>
             <span>
               {i.name} x{i.quantity}
@@ -187,6 +255,16 @@ const Checkout = () => {
             <span>&#8377;{(i.price * i.quantity).toFixed(2)}</span>
           </div>
         ))}
+
+        {!resumeOrderId &&
+          unavailableItems.map((i) => (
+            <div className="checkout-line subtle" key={i.menuItemId} style={{ textDecoration: "line-through" }}>
+              <span>
+                {i.name} x{i.quantity} (unavailable at {branch})
+              </span>
+              <span>&#8377;{(i.price * i.quantity).toFixed(2)}</span>
+            </div>
+          ))}
 
         <div className="checkout-line subtle" style={{ marginTop: 8 }}>
           <span>Subtotal</span>
@@ -206,10 +284,22 @@ const Checkout = () => {
         </div>
       </div>
 
-      {!orderId && (
-        <button className="btn" onClick={handleProceedToPayment} disabled={placing} style={{ width: "100%" }}>
-          {placing ? "Placing order..." : "Proceed to Payment"}
-        </button>
+      {!resumeOrderId && unavailableItems.length > 0 && (
+        <p className="cart-unavailable-note" style={{ marginBottom: 20 }}>
+          {unavailableItems.length} item{unavailableItems.length > 1 ? "s" : ""} above{" "}
+          {unavailableItems.length > 1 ? "aren't" : "isn't"} available at {branch} and will be excluded from this
+          order.
+        </p>
+      )}
+
+      {!orderId && availableItems.length === 0 ? (
+        <p>No items in your cart can be ordered at {branch} right now.</p>
+      ) : (
+        !orderId && (
+          <button className="btn" onClick={handleProceedToPayment} disabled={placing} style={{ width: "100%" }}>
+            {placing ? "Placing order..." : "Proceed to Payment"}
+          </button>
+        )
       )}
 
       {orderId && (

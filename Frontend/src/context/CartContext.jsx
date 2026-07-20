@@ -21,16 +21,13 @@ export function CartProvider({ children }) {
     localStorage.setItem(`${STORAGE_KEY}_branch`, branch);
   }, [branch]);
 
-  // Switching branches invalidates the cart -- menu items and their
-  // availability are branch-specific (see Order Service's branch-exclusive
-  // item handling), so a cart built for one branch isn't valid at another.
+  // Switching branches no longer wipes the cart -- some items may be
+  // branch-exclusive (see Order Service's branch-exclusive item handling),
+  // so items not valid at the newly selected branch are instead flagged as
+  // unavailable wherever the cart is shown (OrderMenu/Checkout cross-check
+  // against that branch's live menu), not silently deleted.
   const changeBranch = useCallback((nextBranch) => {
-    setBranch((prevBranch) => {
-      if (prevBranch && prevBranch !== nextBranch) {
-        setItems([]);
-      }
-      return nextBranch;
-    });
+    setBranch(nextBranch);
   }, []);
 
   const addItem = useCallback((menuItem) => {

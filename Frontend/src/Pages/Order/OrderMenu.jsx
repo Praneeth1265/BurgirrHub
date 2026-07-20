@@ -8,7 +8,7 @@ const CUISINES = ["All", "American", "Italian", "Chinese"];
 const GST_RATE = 0.05; // 2.5% CGST + 2.5% SGST, matches Checkout.jsx
 
 const OrderMenu = () => {
-  const { branch, setBranch, items, addItem, updateQuantity, subtotal, itemCount } = useCart();
+  const { branch, setBranch, items, addItem, updateQuantity, itemCount } = useCart();
   const [branches, setBranches] = useState([]);
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +62,18 @@ const OrderMenu = () => {
     return acc;
   }, {});
 
+  // `menu` is already server-filtered to items that are both available at
+  // `branch` and currently in stock (see menuController's listMenu) -- so
+  // any cart item whose id isn't in here can't be ordered right now,
+  // whether that's because it belongs to a different branch's cart or it
+  // just sold out. Cart items are never deleted for this; they're just
+  // excluded from what's payable until it's resolved (switch branch back,
+  // or remove them).
+  const availableIds = useMemo(() => new Set(menu.map((m) => m._id)), [menu]);
+  const availableCartItems = items.filter((i) => availableIds.has(i.menuItemId));
+  const unavailableCartItems = items.filter((i) => !availableIds.has(i.menuItemId));
+
+  const subtotal = availableCartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const gst = subtotal * GST_RATE;
   const grandTotal = subtotal + gst;
 
@@ -110,7 +122,7 @@ const OrderMenu = () => {
                   const outOfStock = !item.isAvailable || item.stock === 0;
                   return (
                     <div
-                      className={`order-item-card ${highlightId === item._id ? "highlighted" : ""}`}
+                      className={`order-item-card ${highlightId === item._id ? "highlighted" : ""} ${outOfStock ? "unavailable" : ""}`}
                       key={item._id}
                       id={`item-${item._id}`}
                     >
@@ -164,7 +176,7 @@ const OrderMenu = () => {
         ) : (
           <>
             <div className="cart-items">
-              {items.map((i) => (
+              {availableCartItems.map((i) => (
                 <div className="cart-line" key={i.menuItemId}>
                   <div>
                     <div className="cart-line-name">{i.name}</div>
@@ -177,30 +189,56 @@ const OrderMenu = () => {
                   </div>
                 </div>
               ))}
+              {unavailableCartItems.map((i) => (
+                <div className="cart-line cart-line-unavailable" key={i.menuItemId}>
+                  <div>
+                    <div className="cart-line-name">{i.name}</div>
+                    <div className="cart-line-price">Not available at {branch}</div>
+                  </div>
+                  <div className="cart-line-controls">
+                    <span>x{i.quantity}</span>
+                    <button onClick={() => updateQuantity(i.menuItemId, 0)} title="Remove">
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="cart-totals">
-              <div className="cart-total-row">
-                <span>Subtotal</span>
-                <span>&#8377;{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="cart-total-row">
-                <span>CGST (2.5%)</span>
-                <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
-              </div>
-              <div className="cart-total-row">
-                <span>SGST (2.5%)</span>
-                <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
-              </div>
-              <div className="cart-total-row cart-grand-total">
-                <span>Total</span>
-                <span>&#8377;{grandTotal.toFixed(2)}</span>
-              </div>
-            </div>
+            {unavailableCartItems.length > 0 && (
+              <p className="cart-unavailable-note">
+                {unavailableCartItems.length} item{unavailableCartItems.length > 1 ? "s" : ""} in your cart{" "}
+                {unavailableCartItems.length > 1 ? "aren't" : "isn't"} available at {branch}. Switch branch or
+                remove {unavailableCartItems.length > 1 ? "them" : "it"} to continue.
+              </p>
+            )}
 
-            <Link to="/order/checkout" className="btn">
-              Checkout
-            </Link>
+            {availableCartItems.length > 0 && (
+              <>
+                <div className="cart-totals">
+                  <div className="cart-total-row">
+                    <span>Subtotal</span>
+                    <span>&#8377;{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="cart-total-row">
+                    <span>CGST (2.5%)</span>
+                    <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
+                  </div>
+                  <div className="cart-total-row">
+                    <span>SGST (2.5%)</span>
+                    <span>&#8377;{(subtotal * 0.025).toFixed(2)}</span>
+                  </div>
+                  <div className="cart-total-row cart-grand-total">
+                    <span>Total</span>
+                    <span>&#8377;{grandTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <Link to="/order/checkout" className="btn">
+                  Checkout
+                </Link>
+              </>
+            )}
           </>
         )}
       </div>

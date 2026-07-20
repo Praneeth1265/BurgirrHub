@@ -76,9 +76,15 @@ const OrderHistory = () => {
               <span>&#8377;{(order.totalAmount * 0.025).toFixed(2)}</span>
             </div>
             <div className="checkout-line checkout-total">
-              <span>Total Paid</span>
+              <span>{order.status === "pending" ? "Total Due" : "Total Paid"}</span>
               <span>&#8377;{grandTotal.toFixed(2)}</span>
             </div>
+
+            {order.status === "pending" && (
+              <Link to={`/order/checkout?orderId=${order._id}`} className="btn" style={{ width: "100%", marginTop: 14 }}>
+                Pay Now
+              </Link>
+            )}
           </div>
         );
       })}

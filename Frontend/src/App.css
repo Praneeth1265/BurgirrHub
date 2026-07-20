@@ -126,6 +126,10 @@ h3,
   cursor: pointer;
   color: #fff;
   letter-spacing: 0.3px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
   box-shadow: var(--shadow-sm);
 }
@@ -2256,6 +2260,12 @@ footer .footer-bottom {
   letter-spacing: 0.5px;
 }
 
+.order-item-card.unavailable {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+  background-color: var(--color-bg-alt);
+}
+
 /* Floating cart panel */
 .cart-panel {
   position: sticky;
@@ -2329,6 +2339,28 @@ footer .footer-bottom {
   cursor: pointer;
   font-weight: 700;
   line-height: 1;
+}
+
+.cart-line-unavailable {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+.cart-line-unavailable .cart-line-name {
+  color: var(--color-text-soft);
+}
+
+.cart-line-unavailable .cart-line-price {
+  color: var(--color-error);
+}
+
+.cart-unavailable-note {
+  font-size: 12px;
+  color: var(--color-error);
+  background: #f8d7da;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
 }
 
 .cart-totals {
