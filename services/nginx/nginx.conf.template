@@ -1,0 +1,44 @@
+# Reverse proxy for the BurgirrHub microservices stack.
+# All external traffic enters here and is forwarded to the API Gateway,
+# which is the only service meant to be reachable from outside the
+# Docker network in a real deployment.
+#
+# This is the source template for nginx.conf -- redeploy-fresh-ip.sh
+# regenerates nginx.conf from this file by substituting YOUR_DOMAIN with
+# the current sslip.io hostname, so it's safe to re-run every time the
+# instance restarts with a new IP. Don't hand-edit nginx.conf directly;
+# edit this template instead, or the next redeploy will overwrite it.
+
+server {
+    listen 80;
+    server_name _;
+
+    # Lets Certbot's HTTP-01 challenge through even after HTTPS is live,
+    # so renewals can use the webroot method without downtime.
+    location /.well-known/acme-challenge/ {
+        root /usr/share/nginx/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem;
+
+    location / {
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
