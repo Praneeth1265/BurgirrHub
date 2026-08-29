@@ -1,163 +1,216 @@
 # BurgirrHub
-BurgirrHub is an online restaurant reservation system built with the MERN stack (MongoDB, Express, React, Node.js). It enables real-time bookings and allows customers to make reservations easily while also giving restaurant managers control over bookings through an admin dashboard.
 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-## How it works
+A restaurant reservation and ordering platform, built as six Node microservices behind an API
+gateway and tied together by a RabbitMQ event bus.
 
-### For Users (Customers)
+Customers browse a menu, book tables, order food, and pay by card. Staff and managers get a
+branch-scoped dashboard for reservations, orders, and stock. The interesting part isn't the
+features — it's that paying for an order confirms it with no service calling another service
+directly, and no staff action.
 
-1. **Homepage Access**
-   - Users land on a clean landing page with sections like About, Menu, and Team (from `components/`).
-   - Navigation is handled by a smooth scroll and React Router (`Navbar.jsx`).
+**Live:** [burgirr-hub.vercel.app](https://burgirr-hub.vercel.app) ·
+**API:** [burgirrhub-1.onrender.com/health](https://burgirrhub-1.onrender.com/health)
 
-2. **Menu Browsing**
-   - Users can view available dishes and restaurant highlights via `Menu.jsx` and `Menu2.jsx`.
-
-3. **Reservation Form**
-   - From the reservation page (`Reservation.jsx`), users fill in:
-     - Name, Date, Time, Phone, Email, and Branch
-   - On submission:
-     - Form data is sent via Axios to the backend API at `/api/reservations`.
-     - A success message is displayed (`Success.jsx`), confirming reservation.
+> Hosted on free tiers, so the API sleeps when idle — the first request after a quiet spell can
+> take up to a minute to wake it.
 
 ---
 
-### For Manager (Admin Panel)
+## Architecture
 
-1. **Login Interface**
-   - Managers can log in via `Manager.jsx`. *(Note: authentication logic can be expanded later.)*
+```
+                    Browser (React / Vercel)
+                              |
+                            HTTPS
+                              v
+                        API Gateway  ──────────  Redis
+              verify JWT · RBAC · rate limit · CORS   (rate-limit counters)
+                              |
+        ┌───────────┬─────────┼─────────┬──────────────┐
+        v           v         v         v              v
+      Auth     Reservation  Order    Payment    Notification
+     auth_db  reservation_db order_db payment_db notification_db
+        |           |         |  ^      |  ^           ^
+        |           └─────────┼──┼──────┼──┼───────────┤
+        |                     v  |      v  |           |
+        └──────────────►  RabbitMQ topic exchanges ─────┘
+                     reservation.events · order.events · payment.events
+```
 
-2. **Dashboard Access**
-   - `ManagerDashboard.jsx` fetches all reservations from the backend.
-   - Data is displayed in tabular form with options to:
-     - **View**, **Delete** (via `delete.js`)
-     - **Monitor status** in real time
+Two paths through the system:
 
-3. **Data Handling**
-   - Reservations are pulled from MongoDB using backend routes (`reservationRoute.js`, `manager.js`).
-   - `controller/reservation.js` handles core logic.
-   - `models/reservation.js` defines the Mongoose schema.
-   - `error/error.js` handles API exceptions gracefully.
+- **Synchronous** — every browser request enters through one gateway, which verifies the JWT and
+  applies coarse role checks *before* proxying. No service re-implements authentication, and the
+  frontend only ever talks to one origin.
+- **Asynchronous** — services publish events without knowing who consumes them. Order Service
+  publishes `order.created` and doesn't care whether nobody or three services are listening.
+
+That decoupling is what let the Notification Service be added last, subscribing to events from
+three existing services without a line changing in any of them.
+
+### The payment flow
+
+The flow worth reading the code for:
+
+1. Order Service prices the order server-side, saves it `pending`, publishes `order.created`.
+2. Payment Service consumes that and pre-creates a payment record.
+3. Frontend requests a PaymentIntent; Stripe.js confirms the card in the browser.
+4. Stripe calls our webhook. The signature is verified against the **raw** request body, the
+   payment is marked succeeded, and `payment.succeeded` is published.
+5. Order Service consumes that event and advances the order `pending → confirmed` — automatically.
+
+Delete the Payment Service entirely and orders still get placed. They just never leave `pending`.
 
 ---
 
-### Backend Flow
+## Services
 
-1. **Database Connection**
-   - `dbConnection.js` connects to MongoDB using environment variables from `config.env`.
+| Service | Port | Owns | Publishes | Consumes |
+|---|---|---|---|---|
+| `gateway` | 8080 | routing, JWT verification, RBAC, rate limiting, CORS | — | — |
+| `auth-service` | 4001 | users, roles, Google OAuth, token issuing | — | — |
+| `reservation-service` | 4002 | branches, table bookings | `reservation.created` | — |
+| `order-service` | 4003 | menu, orders, status state machine | `order.created` | `payment.*` |
+| `payment-service` | 4004 | Stripe intents, payment records, webhooks | `payment.succeeded` / `.failed` | `order.created` |
+| `notification-service` | 4005 | transactional email, delivery audit log | — | all four events |
 
-2. **Routing & Controllers**
-   - `/api/reservations` → Create and manage reservations
-   - `/api/manager` → Get all reservations for the dashboard
-   - Deletion handled via `/api/delete/:id`
+Supporting containers: `mongo` (one instance, one logical database per service), `redis`
+(rate-limit counters), `rabbitmq`, and `nginx` as the public entry point in a VM deployment.
 
-3. **Deployment**
-   - Backend is Vercel-ready via `vercel.json`.
-   - Frontend build can be hosted on Vercel/Netlify.
-  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## Tech
 
-## File Structure
+**Backend** — Node 20, Express, Mongoose/MongoDB, RabbitMQ (`amqplib`), Redis (`ioredis`),
+`jsonwebtoken`, `google-auth-library`, Stripe, Nodemailer, Zod for request validation, Helmet.
+
+**Frontend** — React 18, Vite, React Router 6, Axios, Stripe.js via `@stripe/react-stripe-js`.
+
+**Infrastructure** — Docker, Docker Compose, Nginx, Let's Encrypt.
+
+---
+
+## Repository layout
+
 ```
 BurgirrHUB/
-├── Backend/
-│   ├── config/
-│   │   └── config.env
-│   ├── controller/
-│   │   └── reservation.js
-│   ├── database/
-│   │   └── dbConnection.js
-│   ├── error/
-│   │   └── error.js
-│   ├── models/
-│   │   └── reservation.js
-│   ├── routes/
-│   │   ├── delete.js
-│   │   ├── manager.js
-│   │   └── reservationRoute.js
-│   ├── app.js
-│   ├── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── vercel.json
-│
-├── Frontend/
-│   ├── node_modules/
-│   ├── public/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── About.jsx
-│   │   │   ├── Footer.jsx
-│   │   │   ├── HeroSection.jsx
-│   │   │   ├── Menu.jsx
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── Qualities.jsx
-│   │   │   ├── Team.jsx
-│   │   │   └── WhoAreWe.jsx
-│   │   ├── Pages/
-│   │   │   ├── Home/
-│   │   │   │   └── Home.jsx
-│   │   │   ├── ManagerDashboard/
-│   │   │   │   └── ManagerDashboard.jsx
-│   │   │   ├── ManagerLogin/
-│   │   │   │   └── Manager.jsx
-│   │   │   ├── Menu/
-│   │   │   │   └── Menu2.jsx
-│   │   │   ├── NotFound/
-│   │   │   │   └── NotFound.jsx
-│   │   │   ├── Reservation/
-│   │   │   │   └── Reservation.jsx
-│   │   │   └── Success/
-│   │   │       └── Success.jsx
-│   │   ├── App.css
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── restApi.json
-│   ├── index.html
-│   ├── package.json
-│   ├── package-lock.json
-│   └── README.md
+├── Frontend/              React app (Vite) — the live frontend
+├── services/              the microservices stack
+│   ├── gateway/           API gateway
+│   ├── auth-service/
+│   ├── reservation-service/
+│   ├── order-service/
+│   ├── payment-service/
+│   ├── notification-service/
+│   ├── nginx/             reverse proxy config for VM deployments
+│   ├── render/            single-container build for free-tier hosting
+│   ├── docker-compose.yml
+│   └── .env.example
+└── Backend/               legacy monolith — superseded, kept for reference
 ```
 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+`Backend/` is the original Express + Mongoose monolith the project started as. The frontend no
+longer talks to it; everything now goes through the gateway. It is kept only as history.
 
-## Setup
+---
 
-### Clone the Repository
+## Running locally
+
+You need Docker, and a Google OAuth client ID (free — Google Cloud Console → APIs & Services →
+Credentials → OAuth client ID → Web application, with `http://localhost:5173` as an authorized
+JavaScript origin).
 
 ```bash
 git clone https://github.com/Praneeth1265/BurgirrHUB.git
-cd BurgirrHUB
+cd BurgirrHUB/services
+cp .env.example .env
 ```
 
-### Backend Setup
+Fill in `JWT_SECRET` and `GOOGLE_CLIENT_ID` in `.env` (generate a secret with the command in the
+file's comments), then:
+
+```bash
+docker compose up --build -d
 ```
-cd backend
+
+Ten containers start. Confirm the stack is healthy:
+
+```bash
+curl http://localhost:8080/health
+docker compose logs order-service payment-service notification-service | grep consumer
 ```
-# Install backend dependencies
-```
+
+You want `{"status":"ok","service":"gateway"}` and three `consumer started` lines. A few
+`retrying in Ns` lines before them are expected — the services boot faster than RabbitMQ accepts
+connections, so they back off and retry.
+
+Then start the frontend:
+
+```bash
+cd ../Frontend
 npm install
 ```
-# Create a config.env file in /config directory with the following content:
-# (replace with your own MongoDB credentials)
 
-MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/burgirrhub
-PORT=4000
+Create `Frontend/.env`:
 
-# Start the backend server
 ```
-node server.js
+VITE_GATEWAY_URL=http://localhost:8080
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
 ```
 
-### Frontend Setup
-```
-cd frontend
-```
-# Install frontend dependencies
-```
-npm install
-```
-# Start the React development server
-```
+```bash
 npm run dev
 ```
+
+Menu and branch data seed themselves on first boot. Payments need a Stripe **test-mode** secret
+key in `services/.env`; the test card is `4242 4242 4242 4242` with any future expiry and CVC.
+
+### Roles
+
+New accounts default to `customer`. Add your email to `ADMIN_EMAILS` in `services/.env` to get the
+manager dashboard — the check runs on every login, so adding yourself later works without touching
+the database. Staff accounts are scoped to one branch and only see that branch's reservations and
+orders.
+
+### Emails
+
+With no SMTP configured, the Notification Service provisions a free
+[Ethereal](https://ethereal.email) test inbox on first send and logs a preview URL for every email:
+
+```bash
+docker compose logs notification-service | grep -i preview
+```
+
+---
+
+## Deploying
+
+Three documented paths, depending on what you can sign up for:
+
+| Runbook | Target | Needs a card? |
+|---|---|---|
+| [`services/DEPLOYMENT_RENDER.md`](services/DEPLOYMENT_RENDER.md) | Render + Atlas + Upstash + CloudAMQP | No |
+| [`services/DEPLOYMENT_AZURE.md`](services/DEPLOYMENT_AZURE.md) | Azure VM + Docker Compose | No (student credit) |
+| [`services/DEPLOYMENT.md`](services/DEPLOYMENT.md) | AWS EC2 + Docker Compose | Yes |
+
+The VM runbooks run `docker-compose.yml` unchanged. The Render path packs the six services into
+one container (`services/render/`) because the free plan gives one 512 MB web service rather than
+ten containers — measured footprint is 168 MB. No service code differs between them.
+
+---
+
+## Known limitations
+
+Honest list, roughly by how much they'd matter in production:
+
+- **Lost-update race in stock decrement.** Order placement reads stock, subtracts in application
+  code, and writes back an absolute value, so concurrent orders can oversell. It needs an atomic
+  `$inc` with the quantity check moved into the query filter.
+- **No automated tests.** Everything was verified by hand against running containers.
+- **No correlation IDs.** Tracing one request across five services means reading five logs.
+- **Symmetric JWT signing.** Gateway and services share one HS256 secret, so any service can mint
+  tokens rather than only verify them. RS256 with a public verification key is the fix.
+- **No refresh-token revocation.** Logout clears the cookie, but the token stays valid until it
+  expires.
+- **No dead-letter queue.** Malformed messages are discarded rather than requeued — deliberate,
+  since retrying them would loop forever, but they should be kept for inspection.
+- **Shared Mongo instance.** Database-per-service logically, one server physically.

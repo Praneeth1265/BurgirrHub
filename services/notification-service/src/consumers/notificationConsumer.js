@@ -1,4 +1,5 @@
 import amqp from "amqplib";
+import { startWithRetry } from "../utils/amqpRetry.js";
 import { NotificationLog } from "../models/notificationLog.js";
 import { sendEmail } from "../utils/mailer.js";
 import {
@@ -24,6 +25,16 @@ const BINDINGS = [
 
 export async function startNotificationConsumer() {
   const conn = await amqp.connect(process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672");
+
+  // Without an 'error' listener amqplib escalates connection errors to an
+  // unhandled exception; without the 'close' one, a RabbitMQ restart (very
+  // possible on a memory-tight host) would leave this service running but
+  // consuming nothing, with no log line to say so.
+  conn.on("error", (err) => console.error("RabbitMQ connection error:", err.message));
+  conn.on("close", () => {
+    console.warn("RabbitMQ connection closed, restarting notification consumer");
+    startWithRetry("notification consumer", startNotificationConsumer);
+  });
   const channel = await conn.createChannel();
 
   const { queue } = await channel.assertQueue(QUEUE, { durable: true });

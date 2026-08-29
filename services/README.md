@@ -161,14 +161,23 @@ Each entry records the event type, recipient, subject, delivery status, the Ethe
 
 ## Deploying
 
-See `DEPLOYMENT.md` for the AWS EC2 + Docker Compose runbook (primary target) and the Render fallback.
+Three runbooks, by what the host requires:
+
+- `DEPLOYMENT_RENDER.md` — Render + Atlas + Upstash + CloudAMQP. **No credit card anywhere.**
+  Packs the six services into one container (`render/`) since the free plan gives one 512 MB
+  web service rather than ten containers. This is what the live deployment runs on.
+- `DEPLOYMENT_AZURE.md` — Azure VM on student credit, running `docker-compose.yml` unchanged.
+- `DEPLOYMENT.md` — the original AWS EC2 runbook.
 
 ## What's not done
 
 The 5-phase roadmap from the Notion doc is complete and everything above has been verified against a live running stack, not just written. What's deliberately still open — matching the "Security recommendations" / "Scaling considerations" sections of the design doc — for whenever this goes further:
 
-- No frontend wired up to any of this yet — `Frontend/` still talks to the old `Backend/` monolith. Pointing it at the gateway (and building an actual checkout UI with Stripe Elements) is the next real step.
+- ~~No frontend wired up~~ — **done**. `Frontend/` now talks to the gateway (`src/api/client.js`),
+  with Google Sign-In, a Stripe Elements checkout, and a manager dashboard. The old `Backend/`
+  monolith is no longer used by anything.
 - No automated tests (unit or integration) — everything here was verified by hand against the live containers during development.
+- Stock decrement is a read-modify-write (`stock: remaining`) rather than an atomic `$inc`, so
+  concurrent orders for the same item can oversell. Not hit in practice at demo traffic, but real.
 - Rate limiting, RBAC, and validation exist, but there's no centralized logging/tracing (correlation IDs) across services yet — tracing one customer's request across 5 services currently means checking 5 separate `docker logs`.
-- Google OAuth login is backend-verified but has no frontend "Sign in with Google" button anywhere yet.
 - Menu/branch data is seeded, not admin-manageable — there's no CRUD UI or API for staff to add a dish or open a new branch.

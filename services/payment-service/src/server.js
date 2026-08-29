@@ -7,6 +7,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import { handleWebhook } from "./controllers/paymentController.js";
 import { errorMiddleware } from "./error/error.js";
 import { startOrderEventsConsumer } from "./consumers/orderEventsConsumer.js";
+import { startWithRetry } from "./utils/amqpRetry.js";
 
 dotenv.config();
 
@@ -40,9 +41,7 @@ const PORT = process.env.PORT || 4004;
 connectDB()
   .then(() => {
     app.listen(PORT, () => console.log(`Payment Service listening on port ${PORT}`));
-    startOrderEventsConsumer().catch((err) =>
-      console.error("Failed to start order events consumer:", err.message)
-    );
+    startWithRetry("order events consumer", startOrderEventsConsumer);
   })
   .catch((err) => {
     console.error("Failed to start Payment Service", err);
