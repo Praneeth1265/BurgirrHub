@@ -114,9 +114,22 @@ Both free, no card. Identical to the other runbooks:
 |---|---|
 | Language / Runtime | **Docker** |
 | Root Directory | `services` |
-| Dockerfile Path | `services/render/Dockerfile` |
+| Dockerfile Path | `render/Dockerfile` |
 | Instance Type | **Free** |
 | Region | Match your Atlas/Upstash regions if possible |
+
+Render's help text says Dockerfile Path is "relative to the repo root".
+It is not — it is resolved relative to **Root Directory**. Entering
+`services/render/Dockerfile` alongside a `services` root directory makes
+Render look for `services/services/render/Dockerfile` and fail the build
+before it starts:
+
+```
+error: invalid local: resolve : lstat /opt/render/project/src/services/services: no such file or directory
+```
+
+Root Directory still sets the Docker build context to `services/`, which
+is what makes the Dockerfile's `COPY auth-service/...` paths resolve.
 
 4. **Environment Variables** — add all of these:
 
