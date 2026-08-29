@@ -28,3 +28,10 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local connection-test scratch scripts -- these tend to hold real
+# credentials pasted in for debugging, and this repo is public.
+Backend/test-connection.cjs
+
+# macOS
+.DS_Store
