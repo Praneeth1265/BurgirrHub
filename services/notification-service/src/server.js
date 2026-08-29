@@ -6,6 +6,7 @@ import { connectDB } from "./database/dbConnection.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import { errorMiddleware } from "./error/error.js";
 import { startNotificationConsumer } from "./consumers/notificationConsumer.js";
+import { startWithRetry } from "./utils/amqpRetry.js";
 
 dotenv.config();
 
@@ -30,9 +31,7 @@ const PORT = process.env.PORT || 4005;
 connectDB()
   .then(() => {
     app.listen(PORT, () => console.log(`Notification Service listening on port ${PORT}`));
-    startNotificationConsumer().catch((err) =>
-      console.error("Failed to start notification consumer:", err.message)
-    );
+    startWithRetry("notification consumer", startNotificationConsumer);
   })
   .catch((err) => {
     console.error("Failed to start Notification Service", err);

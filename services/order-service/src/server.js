@@ -8,6 +8,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import menuRoutes from "./routes/menuRoutes.js";
 import { errorMiddleware } from "./error/error.js";
 import { startPaymentEventsConsumer } from "./consumers/paymentEventsConsumer.js";
+import { startWithRetry } from "./utils/amqpRetry.js";
 
 dotenv.config();
 
@@ -36,9 +37,7 @@ connectDB()
     app.listen(PORT, () => console.log(`Order Service listening on port ${PORT}`));
     // Fire-and-forget: a transient RabbitMQ outage shouldn't prevent the
     // HTTP server itself from coming up and serving requests.
-    startPaymentEventsConsumer().catch((err) =>
-      console.error("Failed to start payment events consumer:", err.message)
-    );
+    startWithRetry("payment events consumer", startPaymentEventsConsumer);
   })
   .catch((err) => {
     console.error("Failed to start Order Service", err);

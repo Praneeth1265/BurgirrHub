@@ -1,4 +1,5 @@
 import amqp from "amqplib";
+import { startWithRetry } from "../utils/amqpRetry.js";
 import { Order } from "../models/order.js";
 import { canTransition } from "../utils/orderTransitions.js";
 
@@ -11,6 +12,16 @@ const QUEUE = "order-service.payment-events";
 // share a topic exchange but neither strictly "owns" it.
 export async function startPaymentEventsConsumer() {
   const conn = await amqp.connect(process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672");
+
+  // Without an 'error' listener amqplib escalates connection errors to an
+  // unhandled exception; without the 'close' one, a RabbitMQ restart (very
+  // possible on a memory-tight host) would leave this service running but
+  // consuming nothing, with no log line to say so.
+  conn.on("error", (err) => console.error("RabbitMQ connection error:", err.message));
+  conn.on("close", () => {
+    console.warn("RabbitMQ connection closed, restarting payment events consumer");
+    startWithRetry("payment events consumer", startPaymentEventsConsumer);
+  });
   const channel = await conn.createChannel();
 
   await channel.assertExchange(EXCHANGE, "topic", { durable: true });
